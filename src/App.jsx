@@ -388,31 +388,57 @@ export default function JanusEnhanced() {
         return `${header}\nDATA:\n${source.data.slice(0, 20000)}\n\n`;
       }).join('\n');
 
-      const response = await fetch('/api/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022',
-          max_tokens: 4000,
-          messages: [{
-            role: 'user',
-            content: `You are Janus, a data processing agent. Process ${allData.length} source(s) with these rules:\n\n${rulesPrompt}\n\nDATA SOURCES:\n${sourcesContent}\n\nFor each rule, provide: 1) What you're doing 2) Results 3) Insights\n\n${kpis.length > 0 ? `\nIMPORTANT: Also calculate these KPIs and format data for visualization:\n${kpis.map(k => `- ${k.name}: ${k.metric} (Target: ${k.target || 'N/A'})`).join('\n')}\n\nFor each KPI, provide data in format: "Label: Value" on separate lines for easy parsing.` : ''}`
-          }]
-        })
-      });
+      console.log('Sending request to API with', allData.length, 'sources and', rules.length, 'rules');
 
-      const data = await response.json();
+      let response;
+      try {
+        response = await fetch('/api/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 4000,
+            messages: [{
+              role: 'user',
+              content: `You are Janus, a data processing agent. Process ${allData.length} source(s) with these rules:\n\n${rulesPrompt}\n\nDATA SOURCES:\n${sourcesContent}\n\nFor each rule, provide: 1) What you're doing 2) Results 3) Insights\n\n${kpis.length > 0 ? `\nIMPORTANT: Also calculate these KPIs and format data for visualization:\n${kpis.map(k => `- ${k.name}: ${k.metric} (Target: ${k.target || 'N/A'})`).join('\n')}\n\nFor each KPI, provide data in format: "Label: Value" on separate lines for easy parsing.` : ''}`
+            }]
+          })
+        });
+      } catch (fetchError) {
+        throw new Error(`Network error: ${fetchError.message}. Make sure the API endpoint is deployed.`);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw new Error(`Failed to parse API response: ${parseError.message}`);
+      }
+
+      // Handle API errors
+      if (!response.ok) {
+        console.error('API Error Response:', data);
+        const errorMessage = data.error || data.message || `API error: ${response.status}`;
+        setError(errorMessage);
+        return;
+      }
+
+      console.log('API Response received:', { hasContent: !!data.content, contentLength: data.content?.length });
+
       setProgress(100);
       setProgressText('Complete!');
-      
-      if (data.content?.[0]) {
+
+      // Validate response structure
+      if (data.content && Array.isArray(data.content) && data.content[0]?.text) {
         const resultText = data.content[0].text;
+        console.log('Successfully extracted result text, length:', resultText.length);
         setResult(resultText);
-        
+
         // Check automations and send notifications if conditions met
         checkAutomations(resultText);
       } else {
-        setError('Unexpected response format');
+        console.error('Unexpected response format:', data);
+        setError(`Unexpected response format. Expected content array but got: ${JSON.stringify(data).slice(0, 200)}`);
       }
     } catch (err) {
       setError(err.message);
