@@ -468,8 +468,8 @@ function JanusEnhanced() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 4000,
+            model: 'claude-3-5-sonnet-20240620',
+            max_tokens: 4096,
             messages: [{
               role: 'user',
               content: `You are Janus, a data processing agent. Process ${allData.length} source(s) with these rules:\n\n${rulesPrompt}\n\nDATA SOURCES:\n${sourcesContent}\n\nFor each rule, provide: 1) What you're doing 2) Results 3) Insights\n\n${kpis.length > 0 ? `\nIMPORTANT: Also calculate these KPIs and format data for visualization:\n${kpis.map(k => `- ${k.name}: ${k.metric} (Target: ${k.target || 'N/A'})`).join('\n')}\n\nFor each KPI, provide data in format: "Label: Value" on separate lines for easy parsing.` : ''}`

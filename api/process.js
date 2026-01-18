@@ -26,7 +26,9 @@ export default async function handler(req, res) {
 
   try {
     console.log('Making request to Anthropic API...');
-    
+    console.log('Request model:', req.body.model);
+    console.log('Request max_tokens:', req.body.max_tokens);
+
     // Make request to Anthropic
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -42,14 +44,15 @@ export default async function handler(req, res) {
 
     // Parse response
     const responseData = await anthropicResponse.json();
-    
+
     // If Anthropic returned an error
     if (!anthropicResponse.ok) {
-      console.error('Anthropic API error:', responseData);
+      console.error('Anthropic API error:', JSON.stringify(responseData, null, 2));
       return res.status(anthropicResponse.status).json(responseData);
     }
 
     // Success
+    console.log('Anthropic API success');
     return res.status(200).json(responseData);
 
   } catch (err) {
