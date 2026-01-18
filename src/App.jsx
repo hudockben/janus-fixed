@@ -19,6 +19,10 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const errorMessage = this.state.error
+        ? (this.state.error.message || String(this.state.error))
+        : 'Unknown error';
+
       return (
         <div className="min-h-screen bg-slate-900 p-6 flex items-center justify-center">
           <div className="bg-red-900/20 border border-red-500 rounded-lg p-8 max-w-2xl">
@@ -30,7 +34,7 @@ class ErrorBoundary extends React.Component {
               Something went wrong. Please refresh the page to try again.
             </p>
             <pre className="bg-slate-800 p-4 rounded text-sm text-red-200 overflow-auto">
-              {this.state.error?.toString()}
+              {errorMessage}
             </pre>
             <button
               onClick={() => window.location.reload()}
