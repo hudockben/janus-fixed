@@ -61,6 +61,7 @@ function JanusEnhanced() {
   const [result, setResult] = useState('');
   const [error, setErrorRaw] = useState('');
   const [success, setSuccessRaw] = useState('');
+  const [automationAlert, setAutomationAlert] = useState('');
   const [activeTab, setActiveTab] = useState('sheets');
 
   // Safe setters that convert objects to strings
@@ -434,8 +435,9 @@ function JanusEnhanced() {
           sendBrowserNotification(title, body);
         }
 
-        setSuccess(`Alert triggered: ${auto.name}`);
-        setTimeout(() => setSuccess(''), 3000);
+        // Show prominent in-app alert banner
+        setAutomationAlert(`🔔 Alert triggered: ${auto.name} - Condition "${auto.condition}" detected!`);
+        setTimeout(() => setAutomationAlert(''), 5000);
       } else {
         console.log(`❌ Condition NOT met for: ${auto.name}. "${auto.condition}" not found in results.`);
       }
@@ -648,6 +650,17 @@ function JanusEnhanced() {
             <div className="mb-6 bg-green-900/20 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
               <p className="text-sm text-green-300">{typeof success === 'string' ? success : JSON.stringify(success)}</p>
+            </div>
+          )}
+
+          {/* Automation Alert Banner */}
+          {automationAlert && (
+            <div className="mb-6 bg-amber-900/30 border-2 border-amber-500 rounded-lg p-4 flex items-center gap-3 animate-pulse shadow-lg">
+              <Bell className="w-6 h-6 text-amber-400 animate-bounce" />
+              <div className="flex-1">
+                <p className="text-base font-bold text-amber-300">{automationAlert}</p>
+                <p className="text-xs text-amber-400 mt-1">Browser notification sent (check if tab is in background)</p>
+              </div>
             </div>
           )}
 
