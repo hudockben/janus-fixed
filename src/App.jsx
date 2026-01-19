@@ -401,7 +401,7 @@ function JanusEnhanced() {
     }
   };
 
-  const checkAutomations = (resultText) => {
+  const checkAutomations = (resultText, sources = [], rulesApplied = []) => {
     console.log('Checking automations. Active automations:', automations.filter(a => a.active).length);
 
     if (automations.length === 0) {
@@ -410,6 +410,16 @@ function JanusEnhanced() {
     }
 
     let triggeredCount = 0;
+
+    // Format sources for email
+    const sourcesInfo = sources.map((s, i) =>
+      s.url ? `${i + 1}. ${s.source}: ${s.url}` : `${i + 1}. ${s.source}: ${s.name}`
+    ).join('\n');
+
+    // Format rules for email
+    const rulesInfo = rulesApplied.map((r, i) =>
+      `${i + 1}. ${r.name}: ${r.prompt}`
+    ).join('\n');
 
     automations.forEach(auto => {
       if (!auto.active) {
@@ -430,9 +440,44 @@ function JanusEnhanced() {
         const title = `🚨 Janus Alert: ${auto.name}`;
         const body = `Condition detected: ${auto.condition}${auto.threshold ? ` (${auto.threshold})` : ''}`;
 
-        if (auto.notifyMethod === 'browser' || auto.notifyMethod === 'email') {
+        // Send browser notification
+        if (auto.notifyMethod === 'browser') {
           console.log('Sending browser notification...');
           sendBrowserNotification(title, body);
+        }
+
+        // Send email notification with full details
+        if (auto.notifyMethod === 'email' && auto.notifyEmail) {
+          console.log('Sending email notification to:', auto.notifyEmail);
+          fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: auto.notifyEmail,
+              automationName: auto.name,
+              condition: auto.condition,
+              threshold: auto.threshold || null,
+              aiResults: resultText,
+              sources: sourcesInfo || 'No sources specified',
+              rulesUsed: rulesInfo || 'No rules specified',
+              timestamp: new Date().toISOString()
+            })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              console.log('Email sent successfully!');
+              setSuccess(`Alert sent via email to ${auto.notifyEmail}`);
+              setTimeout(() => setSuccess(''), 3000);
+            } else {
+              console.error('Email send failed:', data);
+              setError(`Failed to send email: ${data.error}`);
+            }
+          })
+          .catch(err => {
+            console.error('Email send error:', err);
+            setError(`Email error: ${err.message}`);
+          });
         }
 
         // Show prominent in-app alert banner
@@ -570,7 +615,7 @@ function JanusEnhanced() {
         setResult(resultText);
 
         // Check automations and send notifications if conditions met
-        checkAutomations(resultText);
+        checkAutomations(resultText, allData, rules);
       } else {
         console.error('Unexpected response format:', data);
         setError(`Unexpected response format. Expected content array but got: ${JSON.stringify(data).slice(0, 200)}`);
