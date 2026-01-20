@@ -1,6 +1,4 @@
-import { kv } from '@vercel/kv';
-
-const AUTOMATIONS_KEY = 'janus:automations';
+import { sql } from '@vercel/postgres';
 
 export default async function handler(req, res) {
   // CORS headers
@@ -14,9 +12,41 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Ensure table exists
+    await sql`
+      CREATE TABLE IF NOT EXISTS automations (
+        id SERIAL PRIMARY KEY,
+        automation_id BIGINT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        schedule TEXT NOT NULL,
+        time TEXT NOT NULL,
+        condition TEXT NOT NULL,
+        threshold TEXT,
+        notify_email TEXT,
+        notify_method TEXT NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     // GET - Retrieve all automations
     if (req.method === 'GET') {
-      const automations = await kv.get(AUTOMATIONS_KEY) || [];
+      const { rows } = await sql`SELECT * FROM automations ORDER BY created_at DESC`;
+
+      // Convert DB format to app format
+      const automations = rows.map(row => ({
+        id: row.automation_id,
+        name: row.name,
+        schedule: row.schedule,
+        time: row.time,
+        condition: row.condition,
+        threshold: row.threshold,
+        notifyEmail: row.notify_email,
+        notifyMethod: row.notify_method,
+        active: row.active
+      }));
+
       console.log('Retrieved automations:', automations.length);
       return res.status(200).json({ automations });
     }
@@ -29,14 +59,29 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'automations must be an array' });
       }
 
-      await kv.set(AUTOMATIONS_KEY, automations);
+      // Clear existing automations and insert new ones
+      await sql`DELETE FROM automations`;
+
+      for (const auto of automations) {
+        await sql`
+          INSERT INTO automations (
+            automation_id, name, schedule, time, condition,
+            threshold, notify_email, notify_method, active
+          ) VALUES (
+            ${auto.id}, ${auto.name}, ${auto.schedule}, ${auto.time},
+            ${auto.condition}, ${auto.threshold || null},
+            ${auto.notifyEmail || null}, ${auto.notifyMethod}, ${auto.active}
+          )
+        `;
+      }
+
       console.log('Saved automations:', automations.length);
       return res.status(200).json({ success: true, count: automations.length });
     }
 
     // DELETE - Clear all automations
     if (req.method === 'DELETE') {
-      await kv.del(AUTOMATIONS_KEY);
+      await sql`DELETE FROM automations`;
       console.log('Deleted all automations');
       return res.status(200).json({ success: true });
     }

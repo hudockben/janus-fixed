@@ -13,7 +13,7 @@
     "recharts": "^2.10.0",
     "lucide-react": "^0.263.1",
     "resend": "^3.0.0",
-    "@vercel/kv": "^1.0.1"
+    "@vercel/postgres": "^0.5.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
