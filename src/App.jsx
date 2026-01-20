@@ -107,6 +107,11 @@ function JanusEnhanced() {
     notifyMethod: 'browser'
   });
 
+  // Load automations from backend on mount
+  useEffect(() => {
+    loadAutomations();
+  }, []);
+
   // Load recent sheets from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('recentSheets');
@@ -145,6 +150,60 @@ function JanusEnhanced() {
   const textClass = darkMode ? 'text-slate-100' : 'text-slate-900';
   const textSecondary = darkMode ? 'text-slate-300' : 'text-slate-700';
   const inputClass = darkMode ? 'bg-slate-900/30 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-900';
+
+  // Load automations from backend
+  const loadAutomations = async () => {
+    try {
+      console.log('Loading automations from backend...');
+      const response = await fetch('/api/automations');
+      const data = await response.json();
+
+      if (data.automations && Array.isArray(data.automations)) {
+        console.log('Loaded', data.automations.length, 'automations from backend');
+        setAutomations(data.automations);
+        // Also save to localStorage as cache
+        localStorage.setItem('janus:automations', JSON.stringify(data.automations));
+      } else {
+        // Fallback to localStorage if backend fails
+        const cached = localStorage.getItem('janus:automations');
+        if (cached) {
+          console.log('Loading from localStorage fallback');
+          setAutomations(JSON.parse(cached));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load automations from backend:', err);
+      // Fallback to localStorage
+      const cached = localStorage.getItem('janus:automations');
+      if (cached) {
+        console.log('Loading from localStorage after error');
+        setAutomations(JSON.parse(cached));
+      }
+    }
+  };
+
+  // Save automations to backend
+  const saveAutomations = async (newAutomations) => {
+    try {
+      console.log('Saving', newAutomations.length, 'automations to backend...');
+      const response = await fetch('/api/automations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automations: newAutomations })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        console.log('Successfully saved to backend');
+        // Also save to localStorage as cache
+        localStorage.setItem('janus:automations', JSON.stringify(newAutomations));
+      }
+    } catch (err) {
+      console.error('Failed to save automations to backend:', err);
+      // Still save to localStorage
+      localStorage.setItem('janus:automations', JSON.stringify(newAutomations));
+    }
+  };
 
   const ruleTemplates = [
     {
@@ -245,19 +304,23 @@ function JanusEnhanced() {
       return;
     }
 
+    let updatedAutomations;
     if (editingAutomation) {
       // Update existing automation
-      setAutomations(automations.map(a =>
+      updatedAutomations = automations.map(a =>
         a.id === editingAutomation.id
           ? { ...currentAutomation, id: editingAutomation.id, active: a.active }
           : a
-      ));
+      );
       setSuccess('Automation updated successfully!');
     } else {
       // Create new automation
-      setAutomations([...automations, { ...currentAutomation, id: Date.now(), active: true }]);
+      updatedAutomations = [...automations, { ...currentAutomation, id: Date.now(), active: true }];
       setSuccess('Automation created! Note: Deploy to activate scheduled runs.');
     }
+
+    setAutomations(updatedAutomations);
+    saveAutomations(updatedAutomations);
 
     setCurrentAutomation({
       name: '',
@@ -275,7 +338,9 @@ function JanusEnhanced() {
 
   const removeAutomation = (id) => {
     if (confirm('Are you sure you want to delete this automation? This action cannot be undone.')) {
-      setAutomations(automations.filter(a => a.id !== id));
+      const updatedAutomations = automations.filter(a => a.id !== id);
+      setAutomations(updatedAutomations);
+      saveAutomations(updatedAutomations);
       setSuccess('Automation deleted');
       setTimeout(() => setSuccess(''), 2000);
     }
@@ -306,9 +371,11 @@ function JanusEnhanced() {
   };
 
   const toggleAutomation = (id) => {
-    setAutomations(automations.map(a => 
+    const updatedAutomations = automations.map(a =>
       a.id === id ? { ...a, active: !a.active } : a
-    ));
+    );
+    setAutomations(updatedAutomations);
+    saveAutomations(updatedAutomations);
   };
 
   const testAutomation = () => {
