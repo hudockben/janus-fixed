@@ -11,7 +11,18 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Check if Postgres is configured
+  if (!process.env.POSTGRES_URL && !process.env.POSTGRES_URL_NON_POOLING) {
+    console.error('Postgres environment variables not set');
+    return res.status(500).json({
+      error: 'Database not configured. Please ensure Supabase is connected in Vercel and the deployment has completed.',
+      hint: 'Go to Vercel → Storage → Verify connection → Redeploy if needed'
+    });
+  }
+
   try {
+    console.log('Automations API called:', req.method);
+
     // Ensure table exists
     await sql`
       CREATE TABLE IF NOT EXISTS automations (
