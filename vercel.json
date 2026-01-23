@@ -3,6 +3,18 @@
     "api/process.js": {
       "memory": 1024,
       "maxDuration": 30
+    },
+    "api/auth.js": {
+      "memory": 512,
+      "maxDuration": 10
+    },
+    "api/user-data.js": {
+      "memory": 512,
+      "maxDuration": 10
+    },
+    "api/automations.js": {
+      "memory": 512,
+      "maxDuration": 10
     }
   },
   "buildCommand": "npm run build",
