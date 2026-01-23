@@ -1,11 +1,10 @@
 import { sql } from '@vercel/postgres';
-import { requireAuth } from './auth-helper.js';
 
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -13,11 +12,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Require authentication
-    const auth = await requireAuth(req, res);
-    if (!auth) return; // requireAuth already sent 401 response
-
-    const userId = auth.userId;
+    // Use a default user ID for now (no authentication)
+    const userId = 1;
 
     // Ensure table exists with user_id column
     await sql`

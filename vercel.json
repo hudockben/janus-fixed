@@ -4,22 +4,6 @@
       "memory": 1024,
       "maxDuration": 30
     },
-    "api/auth/signup.js": {
-      "memory": 512,
-      "maxDuration": 10
-    },
-    "api/auth/login.js": {
-      "memory": 512,
-      "maxDuration": 10
-    },
-    "api/auth/verify.js": {
-      "memory": 512,
-      "maxDuration": 10
-    },
-    "api/auth/logout.js": {
-      "memory": 256,
-      "maxDuration": 5
-    },
     "api/user-data.js": {
       "memory": 512,
       "maxDuration": 10

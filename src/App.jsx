@@ -111,31 +111,7 @@ function JanusEnhanced() {
   const [showChartBuilder, setShowChartBuilder] = useState(false);
   const [chartData, setChartData] = useState(null);
   const [selectedChartType, setSelectedChartType] = useState('bar');
-
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
-  const [showLogin, setShowLogin] = useState(true); // true = login, false = signup
-  const [authLoading, setAuthLoading] = useState(true);
-  const [loginForm, setLoginForm] = useState({ email: '', password: '', name: '' });
-
-  // Check authentication on mount
-  useEffect(() => {
-    verifyAuth();
-  }, []);
-
-  // Load data after authentication
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadAutomations();
-      loadUserData();
-
-      // Request notification permission on load
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-    }
-  }, [isAuthenticated]);
+  const [showLanding, setShowLanding] = useState(true);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -164,135 +140,12 @@ function JanusEnhanced() {
   const inputClass = darkMode ? 'bg-slate-900/30 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-900';
 
   // Helper to get auth headers
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('janus:token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': token ? `Bearer ${token}` : ''
-    };
-  };
-
-  // Authentication functions
-  const verifyAuth = async () => {
-    const token = localStorage.getItem('janus:token');
-
-    if (!token) {
-      setAuthLoading(false);
-      setIsAuthenticated(false);
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/auth/verify', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-        setIsAuthenticated(true);
-        console.log('User authenticated:', data.user.email);
-      } else {
-        localStorage.removeItem('janus:token');
-        setIsAuthenticated(false);
-      }
-    } catch (err) {
-      console.log('Auth check failed, showing login');
-      localStorage.removeItem('janus:token');
-      setIsAuthenticated(false);
-    }
-
-    setAuthLoading(false);
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: loginForm.email,
-          password: loginForm.password
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        localStorage.setItem('janus:token', data.token);
-        setUser(data.user);
-        setIsAuthenticated(true);
-        setLoginForm({ email: '', password: '', name: '' });
-        setSuccess(`Welcome back, ${data.user.email}!`);
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.error || 'Login failed');
-      }
-    } catch (err) {
-      setError('Network error. Please try again.');
-    }
-  };
-
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: loginForm.email,
-          password: loginForm.password,
-          name: loginForm.name
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        localStorage.setItem('janus:token', data.token);
-        setUser(data.user);
-        setIsAuthenticated(true);
-        setLoginForm({ email: '', password: '', name: '' });
-        setSuccess(`Account created! Welcome, ${data.user.email}!`);
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.error || 'Signup failed');
-      }
-    } catch (err) {
-      setError('Network error. Please try again.');
-    }
-  };
-
-  const handleLogout = async () => {
-    const token = localStorage.getItem('janus:token');
-
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-    } catch (err) {
-      console.log('Logout request failed, clearing local session anyway');
-    }
-
-    localStorage.removeItem('janus:token');
-    setUser(null);
-    setIsAuthenticated(false);
-    setSuccess('Logged out successfully');
-    setTimeout(() => setSuccess(''), 3000);
-  };
-
   // Load automations from backend
   const loadAutomations = async () => {
     try {
       console.log('Loading automations from backend...');
       const response = await fetch('/api/automations', {
-        headers: getAuthHeaders()
+        headers: { 'Content-Type': 'application/json' }
       });
       const data = await response.json();
 
@@ -326,7 +179,7 @@ function JanusEnhanced() {
       console.log('Saving', newAutomations.length, 'automations to backend...');
       const response = await fetch('/api/automations', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ automations: newAutomations })
       });
 
@@ -380,7 +233,7 @@ function JanusEnhanced() {
     try {
       console.log('Syncing with backend...');
       const response = await fetch('/api/user-data', {
-        headers: getAuthHeaders()
+        headers: { 'Content-Type': 'application/json' }
       });
 
       if (!response.ok) {
@@ -425,7 +278,7 @@ function JanusEnhanced() {
     try {
       const response = await fetch('/api/user-data', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recentFiles: filesToSave,
           recentLinks: linksToSave
@@ -1118,129 +971,59 @@ function JanusEnhanced() {
     }
   };
 
-  // Show loading screen while checking auth
-  if (authLoading) {
-    return (
-      <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-teal-400 animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show login/signup screen if not authenticated
-  if (!isAuthenticated) {
+  // Show landing page
+  if (showLanding) {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-6`}>
-        <div className="max-w-md w-full">
-          <div className={`${cardClass} rounded-lg shadow-2xl p-8 border`}>
-            {/* Logo/Header */}
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-bold text-teal-400 mb-2">Janus</h1>
-              <p className="text-sm text-slate-400">AI Data Processing Agent</p>
+        <div className="max-w-2xl w-full text-center">
+          {/* Logo/Icon */}
+          <div className="mb-8">
+            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-teal-400 to-cyan-600 mb-6 shadow-2xl">
+              <Brain className="w-12 h-12 text-white" />
             </div>
-
-            {/* Toggle Login/Signup */}
-            <div className="flex gap-2 mb-6 border-b border-slate-700">
-              <button
-                onClick={() => setShowLogin(true)}
-                className={`flex-1 px-4 py-2 font-medium transition ${showLogin ? 'text-teal-400 border-b-2 border-teal-400' : 'text-slate-400'}`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => setShowLogin(false)}
-                className={`flex-1 px-4 py-2 font-medium transition ${!showLogin ? 'text-teal-400 border-b-2 border-teal-400' : 'text-slate-400'}`}
-              >
-                Sign Up
-              </button>
-            </div>
-
-            {/* Form */}
-            <form onSubmit={showLogin ? handleLogin : handleSignup} className="space-y-4">
-              {!showLogin && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Name (optional)</label>
-                  <input
-                    type="text"
-                    value={loginForm.name}
-                    onChange={(e) => setLoginForm({ ...loginForm, name: e.target.value })}
-                    placeholder="Your name"
-                    className={`w-full px-4 py-3 ${inputClass} border rounded-lg focus:ring-2 focus:ring-teal-400 focus:outline-none`}
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={loginForm.email}
-                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                  placeholder="you@example.com"
-                  required
-                  className={`w-full px-4 py-3 ${inputClass} border rounded-lg focus:ring-2 focus:ring-teal-400 focus:outline-none`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
-                <input
-                  type="password"
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                  className={`w-full px-4 py-3 ${inputClass} border rounded-lg focus:ring-2 focus:ring-teal-400 focus:outline-none`}
-                />
-                {!showLogin && (
-                  <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
-                )}
-              </div>
-
-              {error && (
-                <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-3 flex items-start gap-2">
-                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-300">{error}</p>
-                </div>
-              )}
-
-              {success && (
-                <div className="bg-green-900/20 border border-green-500/50 rounded-lg p-3 flex items-start gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-green-300">{success}</p>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full px-6 py-3 bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold rounded-lg transition shadow-lg hover:shadow-xl"
-              >
-                {showLogin ? 'Login' : 'Create Account'}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center text-sm text-slate-500">
-              {showLogin ? (
-                <p>Don't have an account? <button onClick={() => setShowLogin(false)} className="text-teal-400 hover:text-teal-300">Sign up</button></p>
-              ) : (
-                <p>Already have an account? <button onClick={() => setShowLogin(true)} className="text-teal-400 hover:text-teal-300">Login</button></p>
-              )}
-            </div>
+            <h1 className="text-6xl font-bold text-teal-400 mb-4">Janus</h1>
+            <p className="text-2xl text-slate-300 mb-2">AI Data Processing Agent</p>
+            <p className="text-lg text-slate-400">Intelligent data transformation powered by Claude</p>
           </div>
 
-          <div className="mt-4 text-center text-xs text-slate-500">
-            <p>🔒 Your data is secure and encrypted</p>
+          {/* Features */}
+          <div className={`${cardClass} rounded-lg shadow-2xl p-8 border mb-8`}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="flex flex-col items-center text-center">
+                <Table className="w-10 h-10 text-teal-400 mb-3" />
+                <h3 className="font-semibold text-slate-200 mb-2">Google Sheets</h3>
+                <p className="text-sm text-slate-400">Connect and process spreadsheet data</p>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <Upload className="w-10 h-10 text-teal-400 mb-3" />
+                <h3 className="font-semibold text-slate-200 mb-2">Local Files</h3>
+                <p className="text-sm text-slate-400">Upload CSV, JSON, and text files</p>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <Zap className="w-10 h-10 text-teal-400 mb-3" />
+                <h3 className="font-semibold text-slate-200 mb-2">Automations</h3>
+                <p className="text-sm text-slate-400">Schedule automated processing</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowLanding(false)}
+              className="w-full max-w-md mx-auto px-8 py-4 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500 text-white text-lg font-bold rounded-lg transition-all transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center gap-3"
+            >
+              <Play className="w-6 h-6" />
+              Launch Janus Agent
+            </button>
           </div>
+
+          <p className="text-sm text-slate-500">
+            Process, transform, and analyze your data with AI-powered rules
+          </p>
         </div>
       </div>
     );
   }
 
-  // Main app (authenticated users only)
+  // Main app
   return (
     <div className={`min-h-screen ${bgClass} p-6 transition-colors`}>
       <div className="max-w-5xl mx-auto">
@@ -1250,14 +1033,10 @@ function JanusEnhanced() {
             <div>
               <h1 className={`text-4xl font-bold ${textClass}`}>Janus v2.1</h1>
               <span className="text-sm text-teal-400">AI Data Processing Agent</span>
-              {user && <p className="text-xs text-slate-500 mt-1">Logged in as {user.email}</p>}
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition" title="Toggle theme (Alt+T)">
                 {darkMode ? <Sun className="w-6 h-6 text-slate-300" /> : <Moon className="w-6 h-6 text-slate-600" />}
-              </button>
-              <button onClick={handleLogout} className="px-4 py-2 text-sm bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition" title="Logout">
-                Logout
               </button>
             </div>
           </div>
