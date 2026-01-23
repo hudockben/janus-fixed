@@ -3,7 +3,9 @@ import {
   hashPassword,
   generateToken,
   ensureUsersTable,
-  setCorsHeaders
+  setCorsHeaders,
+  validatePassword,
+  checkRateLimit
 } from '../auth-helper.js';
 
 export default async function handler(req, res) {
@@ -28,6 +30,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
+    // Rate limiting check - use IP as identifier for signup
+    const identifier = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const rateLimit = checkRateLimit(`signup:${identifier}`, 3, 60 * 60 * 1000); // 3 attempts per hour
+
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: `Too many signup attempts. Please try again in ${Math.ceil(rateLimit.retryAfter / 60)} minutes.`
+      });
+    }
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
@@ -35,8 +47,9 @@ export default async function handler(req, res) {
     }
 
     // Validate password strength
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
     }
 
     // Check if user exists

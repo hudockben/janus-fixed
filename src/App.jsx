@@ -1193,11 +1193,11 @@ function JanusEnhanced() {
                   onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                   placeholder="••••••••"
                   required
-                  minLength={6}
+                  minLength={8}
                   className={`w-full px-4 py-3 ${inputClass} border rounded-lg focus:ring-2 focus:ring-teal-400 focus:outline-none`}
                 />
                 {!showLogin && (
-                  <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
+                  <p className="text-xs text-slate-500 mt-1">Minimum 8 characters with uppercase, lowercase, and number</p>
                 )}
               </div>
 

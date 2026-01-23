@@ -3,7 +3,8 @@ import {
   verifyPassword,
   generateToken,
   ensureUsersTable,
-  setCorsHeaders
+  setCorsHeaders,
+  checkRateLimit
 } from '../auth-helper.js';
 
 export default async function handler(req, res) {
@@ -26,6 +27,16 @@ export default async function handler(req, res) {
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    // Rate limiting check - use email or IP as identifier
+    const identifier = email || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const rateLimit = checkRateLimit(`login:${identifier}`);
+
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: `Too many login attempts. Please try again in ${rateLimit.retryAfter} seconds.`
+      });
     }
 
     // Find user

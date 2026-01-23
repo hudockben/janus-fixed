@@ -1,6 +1,73 @@
 import { sql } from '@vercel/postgres';
 import crypto from 'crypto';
 
+// In-memory rate limiter storage
+const rateLimitStore = new Map();
+
+// Clean up old entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, data] of rateLimitStore.entries()) {
+    if (now - data.resetTime > 0) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// Rate limiting check
+export function checkRateLimit(identifier, maxAttempts = 5, windowMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const record = rateLimitStore.get(identifier);
+
+  if (!record || now > record.resetTime) {
+    // Create new record or reset expired one
+    rateLimitStore.set(identifier, {
+      attempts: 1,
+      resetTime: now + windowMs
+    });
+    return { allowed: true, remaining: maxAttempts - 1 };
+  }
+
+  if (record.attempts >= maxAttempts) {
+    const retryAfter = Math.ceil((record.resetTime - now) / 1000);
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfter
+    };
+  }
+
+  record.attempts += 1;
+  return {
+    allowed: true,
+    remaining: maxAttempts - record.attempts
+  };
+}
+
+// Validate password strength
+export function validatePassword(password) {
+  if (!password || password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters long' };
+  }
+
+  // Check for at least one uppercase letter
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one uppercase letter' };
+  }
+
+  // Check for at least one lowercase letter
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one lowercase letter' };
+  }
+
+  // Check for at least one number
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one number' };
+  }
+
+  return { valid: true };
+}
+
 // Hash password using crypto
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -16,10 +83,14 @@ export function verifyPassword(password, salt, hash) {
 
 // Generate JWT-like token with user data encoded
 export function generateToken(userId, email) {
+  const now = Date.now();
+  const expiresIn = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+
   const payload = {
     userId,
     email,
-    iat: Date.now()
+    iat: now,
+    exp: now + expiresIn
   };
   const payloadStr = JSON.stringify(payload);
   const payloadB64 = Buffer.from(payloadStr).toString('base64');
@@ -54,6 +125,12 @@ export function verifyToken(token) {
     // Decode payload
     const payloadStr = Buffer.from(payloadB64, 'base64').toString('utf-8');
     const payload = JSON.parse(payloadStr);
+
+    // Check token expiration
+    if (payload.exp && Date.now() > payload.exp) {
+      console.log('Token expired');
+      return null;
+    }
 
     return payload;
   } catch (err) {
