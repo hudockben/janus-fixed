@@ -108,6 +108,9 @@ function JanusEnhanced() {
     notifyEmail: '',
     notifyMethod: 'browser'
   });
+  const [showChartBuilder, setShowChartBuilder] = useState(false);
+  const [chartData, setChartData] = useState(null);
+  const [selectedChartType, setSelectedChartType] = useState('bar');
 
   // Load automations and user data from backend on mount
   useEffect(() => {
@@ -703,7 +706,7 @@ function JanusEnhanced() {
     // Try to extract numeric data from the result for visualization
     const lines = resultText.split('\n');
     const dataPoints = [];
-    
+
     lines.forEach(line => {
       // Look for patterns like "Day 1: 50 units" or "Week 1: $5000"
       const match = line.match(/(\w+\s*\d+)[:\s]+(\d+(?:\.\d+)?)/i);
@@ -714,8 +717,103 @@ function JanusEnhanced() {
         });
       }
     });
-    
+
     return dataPoints.length > 0 ? dataPoints : null;
+  };
+
+  // Parse CSV data for charting
+  const parseDataForCharts = (csvText) => {
+    try {
+      const lines = csvText.trim().split('\n');
+      if (lines.length < 2) return null;
+
+      const headers = lines[0].split(',').map(h => h.trim());
+      const rows = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim());
+        const row = {};
+        headers.forEach((header, i) => {
+          const value = values[i];
+          // Try to parse as number
+          const numValue = parseFloat(value);
+          row[header] = isNaN(numValue) ? value : numValue;
+        });
+        return row;
+      });
+
+      // Find numeric and text columns
+      const numericColumns = headers.filter(header =>
+        rows.some(row => typeof row[header] === 'number')
+      );
+      const textColumns = headers.filter(header =>
+        !numericColumns.includes(header)
+      );
+
+      return {
+        headers,
+        rows,
+        numericColumns,
+        textColumns,
+        labelColumn: textColumns[0] || headers[0],
+        valueColumn: numericColumns[0] || headers[1]
+      };
+    } catch (err) {
+      console.error('Failed to parse CSV:', err);
+      return null;
+    }
+  };
+
+  // Generate chart data from parsed CSV
+  const generateChartData = (parsedData, labelCol, valueCol) => {
+    if (!parsedData) return null;
+
+    return parsedData.rows.slice(0, 20).map(row => ({
+      label: String(row[labelCol] || ''),
+      value: typeof row[valueCol] === 'number' ? row[valueCol] : parseFloat(row[valueCol]) || 0,
+      ...row  // Include all columns for tooltip
+    }));
+  };
+
+  // Auto-generate charts from current data
+  const autoGenerateCharts = () => {
+    let dataSource = null;
+
+    // Try to use local files first
+    if (localFiles.length > 0) {
+      const firstFile = localFiles[0];
+      const parsed = parseDataForCharts(firstFile.content);
+      if (parsed) {
+        const chartD = generateChartData(parsed, parsed.labelColumn, parsed.valueColumn);
+        setChartData({
+          data: chartD,
+          parsed: parsed,
+          source: firstFile.name
+        });
+        setShowChartBuilder(true);
+        setSuccess(`Generated chart from ${firstFile.name}`);
+        setTimeout(() => setSuccess(''), 3000);
+        return;
+      }
+    }
+
+    // Or use result if available
+    if (result) {
+      const parsed = parseDataForCharts(result);
+      if (parsed) {
+        const chartD = generateChartData(parsed, parsed.labelColumn, parsed.valueColumn);
+        setChartData({
+          data: chartD,
+          parsed: parsed,
+          source: 'Analysis Result'
+        });
+        setShowChartBuilder(true);
+        setSuccess('Generated chart from analysis result');
+        setTimeout(() => setSuccess(''), 3000);
+        return;
+      }
+    }
+
+    setError('No suitable data found for charting. Upload CSV or run analysis first.');
+    setTimeout(() => setError(''), 3000);
   };
 
   const processSheets = async () => {
@@ -938,6 +1036,12 @@ function JanusEnhanced() {
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
                 KPIs
+              </div>
+            </button>
+            <button onClick={() => setActiveTab('charts')} className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'charts' ? 'text-teal-400 border-b-2 border-teal-400' : 'text-slate-400'}`}>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                Charts
               </div>
             </button>
             <button onClick={() => setActiveTab('automations')} className={`px-4 py-2 font-medium transition whitespace-nowrap ${activeTab === 'automations' ? 'text-teal-400 border-b-2 border-teal-400' : 'text-slate-400'}`}>
@@ -1360,6 +1464,157 @@ function JanusEnhanced() {
                   </ul>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Charts Tab */}
+          {activeTab === 'charts' && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-slate-300">Visualize your data with interactive charts</p>
+                <button onClick={autoGenerateCharts} className="px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-900 font-medium rounded-lg transition text-sm">
+                  🎨 Auto-Generate Chart
+                </button>
+              </div>
+
+              {chartData ? (
+                <div className={`${inputClass} border rounded-lg p-4`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-medium text-teal-400">
+                      Chart from: {chartData.source}
+                    </h4>
+                    <button onClick={() => setChartData(null)} className="text-slate-500 hover:text-red-400">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Chart Type Selector */}
+                  <div className="mb-4">
+                    <label className="block text-xs text-slate-400 mb-2">Chart Type</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      <button
+                        onClick={() => setSelectedChartType('bar')}
+                        className={`px-3 py-2 rounded-lg transition ${selectedChartType === 'bar' ? 'bg-teal-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <BarChart3 className="w-4 h-4" />
+                          <span className="text-xs">Bar</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setSelectedChartType('line')}
+                        className={`px-3 py-2 rounded-lg transition ${selectedChartType === 'line' ? 'bg-teal-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <TrendingUp className="w-4 h-4" />
+                          <span className="text-xs">Line</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setSelectedChartType('pie')}
+                        className={`px-3 py-2 rounded-lg transition ${selectedChartType === 'pie' ? 'bg-teal-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <PieChart className="w-4 h-4" />
+                          <span className="text-xs">Pie</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => setSelectedChartType('area')}
+                        className={`px-3 py-2 rounded-lg transition ${selectedChartType === 'area' ? 'bg-teal-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <TrendingUp className="w-4 h-4" />
+                          <span className="text-xs">Area</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Chart Display */}
+                  <div className="bg-slate-900/50 rounded-lg p-4 mb-4">
+                    <ResponsiveContainer width="100%" height={300}>
+                      {selectedChartType === 'bar' && (
+                        <BarChart data={chartData.data}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#334155' : '#cbd5e1'} />
+                          <XAxis dataKey="label" stroke={darkMode ? '#94a3b8' : '#64748b'} fontSize={12} angle={-45} textAnchor="end" height={80} />
+                          <YAxis stroke={darkMode ? '#94a3b8' : '#64748b'} fontSize={12} />
+                          <Tooltip contentStyle={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: '1px solid #334155' }} />
+                          <Legend />
+                          <Bar dataKey="value" fill="#14b8a6" name={chartData.parsed?.valueColumn || 'Value'} />
+                        </BarChart>
+                      )}
+                      {selectedChartType === 'line' && (
+                        <LineChart data={chartData.data}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#334155' : '#cbd5e1'} />
+                          <XAxis dataKey="label" stroke={darkMode ? '#94a3b8' : '#64748b'} fontSize={12} angle={-45} textAnchor="end" height={80} />
+                          <YAxis stroke={darkMode ? '#94a3b8' : '#64748b'} fontSize={12} />
+                          <Tooltip contentStyle={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: '1px solid #334155' }} />
+                          <Legend />
+                          <Line type="monotone" dataKey="value" stroke="#14b8a6" strokeWidth={2} dot={{ fill: '#14b8a6' }} name={chartData.parsed?.valueColumn || 'Value'} />
+                        </LineChart>
+                      )}
+                      {selectedChartType === 'pie' && (
+                        <RePieChart>
+                          <Pie
+                            data={chartData.data}
+                            dataKey="value"
+                            nameKey="label"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={100}
+                            label={(entry) => entry.label}
+                          >
+                            {chartData.data.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={['#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444'][index % 8]} />
+                            ))}
+                          </Pie>
+                          <Tooltip contentStyle={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: '1px solid #334155' }} />
+                          <Legend />
+                        </RePieChart>
+                      )}
+                      {selectedChartType === 'area' && (
+                        <LineChart data={chartData.data}>
+                          <defs>
+                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.1}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#334155' : '#cbd5e1'} />
+                          <XAxis dataKey="label" stroke={darkMode ? '#94a3b8' : '#64748b'} fontSize={12} angle={-45} textAnchor="end" height={80} />
+                          <YAxis stroke={darkMode ? '#94a3b8' : '#64748b'} fontSize={12} />
+                          <Tooltip contentStyle={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: '1px solid #334155' }} />
+                          <Legend />
+                          <Line type="monotone" dataKey="value" stroke="#14b8a6" strokeWidth={2} fill="url(#colorValue)" fillOpacity={1} name={chartData.parsed?.valueColumn || 'Value'} />
+                        </LineChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Data Info */}
+                  <div className="text-xs text-slate-400">
+                    <p>📊 Showing {chartData.data.length} data points</p>
+                    <p>📈 Label: {chartData.parsed?.labelColumn} | Value: {chartData.parsed?.valueColumn}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className={`${inputClass} border border-dashed rounded-lg p-8 text-center`}>
+                  <BarChart3 className="w-12 h-12 text-slate-500 mx-auto mb-3" />
+                  <p className="text-sm text-slate-400">No chart generated yet</p>
+                  <p className="text-xs text-slate-500 mt-1">Upload a CSV file or run analysis, then click "Auto-Generate Chart"</p>
+                </div>
+              )}
+
+              <div className="mt-4 bg-purple-900/20 border border-purple-500/30 rounded-lg p-3">
+                <p className="text-xs text-purple-300 mb-1">💡 <strong>Chart Tips:</strong></p>
+                <ul className="text-xs text-purple-300 space-y-1">
+                  <li>• Upload a CSV file with numeric data for best results</li>
+                  <li>• The first column is used as labels, first numeric column as values</li>
+                  <li>• Switch between bar, line, pie, and area charts</li>
+                  <li>• Charts show up to 20 data points for clarity</li>
+                </ul>
+              </div>
             </div>
           )}
 
