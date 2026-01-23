@@ -163,6 +163,15 @@ function JanusEnhanced() {
   const textSecondary = darkMode ? 'text-slate-300' : 'text-slate-700';
   const inputClass = darkMode ? 'bg-slate-900/30 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-900';
 
+  // Helper to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('janus:token');
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : ''
+    };
+  };
+
   // Authentication functions
   const verifyAuth = async () => {
     const token = localStorage.getItem('janus:token');
@@ -282,7 +291,9 @@ function JanusEnhanced() {
   const loadAutomations = async () => {
     try {
       console.log('Loading automations from backend...');
-      const response = await fetch('/api/automations');
+      const response = await fetch('/api/automations', {
+        headers: getAuthHeaders()
+      });
       const data = await response.json();
 
       if (data.automations && Array.isArray(data.automations)) {
@@ -315,7 +326,7 @@ function JanusEnhanced() {
       console.log('Saving', newAutomations.length, 'automations to backend...');
       const response = await fetch('/api/automations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ automations: newAutomations })
       });
 
@@ -368,7 +379,9 @@ function JanusEnhanced() {
     // Then try to sync from backend (will update if backend has newer data)
     try {
       console.log('Syncing with backend...');
-      const response = await fetch('/api/user-data');
+      const response = await fetch('/api/user-data', {
+        headers: getAuthHeaders()
+      });
 
       if (!response.ok) {
         console.log('Backend not available, using localStorage');
@@ -412,7 +425,7 @@ function JanusEnhanced() {
     try {
       const response = await fetch('/api/user-data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           recentFiles: filesToSave,
           recentLinks: linksToSave

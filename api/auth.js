@@ -1,8 +1,6 @@
 import { sql } from '@vercel/postgres';
 import crypto from 'crypto';
-
-// Simple session store (in production, use Redis or database)
-const sessions = new Map();
+import { sessions } from './auth-helper.js';
 
 // Hash password using crypto
 function hashPassword(password) {
