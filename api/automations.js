@@ -1,10 +1,11 @@
 import { sql } from '@vercel/postgres';
+import { requireAuth } from './auth-helper.js';
 
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
@@ -12,11 +13,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Ensure table exists
+    // Require authentication
+    const auth = await requireAuth(req, res);
+    if (!auth) return; // requireAuth already sent 401 response
+
+    const userId = auth.userId;
+
+    // Ensure table exists with user_id column
     await sql`
       CREATE TABLE IF NOT EXISTS automations (
         id SERIAL PRIMARY KEY,
-        automation_id BIGINT UNIQUE NOT NULL,
+        user_id INTEGER NOT NULL,
+        automation_id BIGINT NOT NULL,
         name TEXT NOT NULL,
         schedule TEXT NOT NULL,
         time TEXT NOT NULL,
@@ -26,13 +34,26 @@ export default async function handler(req, res) {
         notify_method TEXT NOT NULL,
         active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, automation_id)
       )
     `;
 
-    // GET - Retrieve all automations
+    // Add user_id column if it doesn't exist (migration for existing tables)
+    try {
+      await sql`ALTER TABLE automations ADD COLUMN IF NOT EXISTS user_id INTEGER`;
+    } catch (err) {
+      // Column might already exist, that's ok
+      console.log('user_id column may already exist');
+    }
+
+    // GET - Retrieve user's automations
     if (req.method === 'GET') {
-      const { rows } = await sql`SELECT * FROM automations ORDER BY created_at DESC`;
+      const { rows } = await sql`
+        SELECT * FROM automations
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+      `;
 
       // Convert DB format to app format
       const automations = rows.map(row => ({
@@ -47,11 +68,11 @@ export default async function handler(req, res) {
         active: row.active
       }));
 
-      console.log('Retrieved automations:', automations.length);
+      console.log(`Retrieved ${automations.length} automations for user ${userId}`);
       return res.status(200).json({ automations });
     }
 
-    // POST - Save automations (full replacement)
+    // POST - Save user's automations (full replacement)
     if (req.method === 'POST') {
       const { automations } = req.body;
 
@@ -59,30 +80,30 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'automations must be an array' });
       }
 
-      // Clear existing automations and insert new ones
-      await sql`DELETE FROM automations`;
+      // Clear existing automations for this user and insert new ones
+      await sql`DELETE FROM automations WHERE user_id = ${userId}`;
 
       for (const auto of automations) {
         await sql`
           INSERT INTO automations (
-            automation_id, name, schedule, time, condition,
+            user_id, automation_id, name, schedule, time, condition,
             threshold, notify_email, notify_method, active
           ) VALUES (
-            ${auto.id}, ${auto.name}, ${auto.schedule}, ${auto.time},
+            ${userId}, ${auto.id}, ${auto.name}, ${auto.schedule}, ${auto.time},
             ${auto.condition}, ${auto.threshold || null},
             ${auto.notifyEmail || null}, ${auto.notifyMethod}, ${auto.active}
           )
         `;
       }
 
-      console.log('Saved automations:', automations.length);
+      console.log(`Saved ${automations.length} automations for user ${userId}`);
       return res.status(200).json({ success: true, count: automations.length });
     }
 
-    // DELETE - Clear all automations
+    // DELETE - Clear all user's automations
     if (req.method === 'DELETE') {
-      await sql`DELETE FROM automations`;
-      console.log('Deleted all automations');
+      await sql`DELETE FROM automations WHERE user_id = ${userId}`;
+      console.log(`Deleted all automations for user ${userId}`);
       return res.status(200).json({ success: true });
     }
 
