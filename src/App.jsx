@@ -91,6 +91,8 @@ function JanusEnhanced() {
   const [progressText, setProgressText] = useState('');
   const [exportFormat, setExportFormat] = useState('txt');
   const [recentSheets, setRecentSheets] = useState([]);
+  const [recentFiles, setRecentFiles] = useState([]);
+  const [recentLinks, setRecentLinks] = useState([]);
   const [kpis, setKpis] = useState([]);
   const [showKpiBuilder, setShowKpiBuilder] = useState(false);
   const [currentKpi, setCurrentKpi] = useState({ name: '', metric: '', target: '', chartType: 'line' });
@@ -107,9 +109,10 @@ function JanusEnhanced() {
     notifyMethod: 'browser'
   });
 
-  // Load automations from backend on mount
+  // Load automations and user data from backend on mount
   useEffect(() => {
     loadAutomations();
+    loadUserData();
   }, []);
 
   // Load recent sheets from localStorage
@@ -205,6 +208,82 @@ function JanusEnhanced() {
     }
   };
 
+  // Load user data from backend
+  const loadUserData = async () => {
+    try {
+      console.log('Loading user data from backend...');
+      const response = await fetch('/api/user-data');
+      const data = await response.json();
+
+      if (data.recentFiles && Array.isArray(data.recentFiles)) {
+        console.log('Loaded', data.recentFiles.length, 'recent files from backend');
+        setRecentFiles(data.recentFiles);
+        localStorage.setItem('janus:recentFiles', JSON.stringify(data.recentFiles));
+      }
+
+      if (data.recentLinks && Array.isArray(data.recentLinks)) {
+        console.log('Loaded', data.recentLinks.length, 'recent links from backend');
+        setRecentLinks(data.recentLinks);
+        setRecentSheets(data.recentLinks.map(link => link.url));
+        localStorage.setItem('janus:recentLinks', JSON.stringify(data.recentLinks));
+        localStorage.setItem('recentSheets', JSON.stringify(data.recentLinks.map(link => link.url)));
+      } else {
+        // Fallback to localStorage if backend fails
+        const cachedFiles = localStorage.getItem('janus:recentFiles');
+        const cachedLinks = localStorage.getItem('janus:recentLinks');
+        if (cachedFiles) {
+          console.log('Loading recent files from localStorage fallback');
+          setRecentFiles(JSON.parse(cachedFiles));
+        }
+        if (cachedLinks) {
+          console.log('Loading recent links from localStorage fallback');
+          setRecentLinks(JSON.parse(cachedLinks));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load user data from backend:', err);
+      // Fallback to localStorage
+      const cachedFiles = localStorage.getItem('janus:recentFiles');
+      const cachedLinks = localStorage.getItem('janus:recentLinks');
+      if (cachedFiles) {
+        console.log('Loading recent files from localStorage after error');
+        setRecentFiles(JSON.parse(cachedFiles));
+      }
+      if (cachedLinks) {
+        console.log('Loading recent links from localStorage after error');
+        setRecentLinks(JSON.parse(cachedLinks));
+      }
+    }
+  };
+
+  // Save user data to backend
+  const saveUserData = async (files, links) => {
+    try {
+      console.log('Saving user data to backend...');
+      const response = await fetch('/api/user-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recentFiles: files || recentFiles,
+          recentLinks: links || recentLinks
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        console.log('Successfully saved user data to backend');
+        // Also save to localStorage as cache
+        localStorage.setItem('janus:recentFiles', JSON.stringify(files || recentFiles));
+        localStorage.setItem('janus:recentLinks', JSON.stringify(links || recentLinks));
+      }
+    } catch (err) {
+      console.error('Failed to save user data to backend:', err);
+      // Still save to localStorage
+      localStorage.setItem('janus:recentFiles', JSON.stringify(files || recentFiles));
+      localStorage.setItem('janus:recentLinks', JSON.stringify(links || recentLinks));
+    }
+  };
+
   const ruleTemplates = [
     {
       name: 'Financial Analysis',
@@ -244,12 +323,30 @@ function JanusEnhanced() {
       return;
     }
     setSheetUrls([...sheetUrls, currentUrl.trim()]);
-    
-    // Add to recent
-    const newRecent = [currentUrl, ...recentSheets.filter(s => s !== currentUrl)].slice(0, 5);
+
+    // Add to recent with metadata
+    const linkEntry = {
+      url: currentUrl.trim(),
+      title: 'Google Sheet',
+      timestamp: new Date().toISOString()
+    };
+
+    // Update recent links (keep last 10)
+    const updatedRecentLinks = [
+      linkEntry,
+      ...recentLinks.filter(l => l.url !== currentUrl.trim())
+    ].slice(0, 10);
+
+    setRecentLinks(updatedRecentLinks);
+
+    // Also update recentSheets for backward compatibility
+    const newRecent = updatedRecentLinks.map(l => l.url).slice(0, 5);
     setRecentSheets(newRecent);
     localStorage.setItem('recentSheets', JSON.stringify(newRecent));
-    
+
+    // Save to backend
+    saveUserData(recentFiles, updatedRecentLinks);
+
     setCurrentUrl('');
     setError('');
   };
@@ -257,11 +354,29 @@ function JanusEnhanced() {
   const handleFileUpload = async (e) => {
     const uploadedFiles = Array.from(e.target.files);
     const newFiles = [];
-    
+
     for (const file of uploadedFiles) {
       try {
         const text = await file.text();
         newFiles.push({ name: file.name, content: text, size: file.size });
+
+        // Track recent file
+        const fileType = file.name.split('.').pop();
+        const fileEntry = {
+          name: file.name,
+          fileType: fileType,
+          fileSize: file.size,
+          timestamp: new Date().toISOString()
+        };
+
+        // Update recent files (keep last 10)
+        const updatedRecentFiles = [
+          fileEntry,
+          ...recentFiles.filter(f => f.name !== file.name)
+        ].slice(0, 10);
+
+        setRecentFiles(updatedRecentFiles);
+        saveUserData(updatedRecentFiles, recentLinks);
       } catch (err) {
         setError(`Failed to read ${file.name}`);
       }
@@ -814,11 +929,11 @@ function JanusEnhanced() {
                   />
                   <button onClick={addSheet} className="px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-900 font-medium rounded-lg transition">Add</button>
                 </div>
-                {recentSheets.length > 0 && (
+                {recentLinks.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="text-xs text-slate-500">Recent:</span>
-                    {recentSheets.slice(0, 3).map((url, i) => (
-                      <button key={i} onClick={() => setCurrentUrl(url)} className="text-xs bg-slate-700/50 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded">
+                    {recentLinks.slice(0, 3).map((link, i) => (
+                      <button key={i} onClick={() => setCurrentUrl(link.url)} className="text-xs bg-slate-700/50 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded" title={link.url}>
                         Sheet {i + 1}
                       </button>
                     ))}
@@ -855,6 +970,16 @@ function JanusEnhanced() {
                     <p className="text-sm text-slate-300">Click to upload CSV, JSON, or TXT files</p>
                   </label>
                 </div>
+                {recentFiles.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="text-xs text-slate-500">Recent:</span>
+                    {recentFiles.slice(0, 5).map((file, i) => (
+                      <button key={i} className="text-xs bg-slate-700/50 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded" title={file.name}>
+                        {file.name.length > 20 ? file.name.substring(0, 17) + '...' : file.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               {localFiles.length > 0 && (
                 <div className="space-y-2">
