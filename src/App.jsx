@@ -356,13 +356,14 @@ function JanusEnhanced() {
   const handleFileUpload = async (e) => {
     const uploadedFiles = Array.from(e.target.files);
     const newFiles = [];
+    const newFileEntries = [];
 
     for (const file of uploadedFiles) {
       try {
         const text = await file.text();
         newFiles.push({ name: file.name, content: text, size: file.size });
 
-        // Track recent file
+        // Track recent file metadata
         const fileType = file.name.split('.').pop();
         const fileEntry = {
           name: file.name,
@@ -370,19 +371,23 @@ function JanusEnhanced() {
           fileSize: file.size,
           timestamp: new Date().toISOString()
         };
-
-        // Update recent files (keep last 10)
-        const updatedRecentFiles = [
-          fileEntry,
-          ...recentFiles.filter(f => f.name !== file.name)
-        ].slice(0, 10);
-
-        setRecentFiles(updatedRecentFiles);
-        saveUserData(updatedRecentFiles, recentLinks);
+        newFileEntries.push(fileEntry);
       } catch (err) {
         setError(`Failed to read ${file.name}`);
       }
     }
+
+    // Update recent files list (keep last 10, remove duplicates)
+    if (newFileEntries.length > 0) {
+      const updatedRecentFiles = [
+        ...newFileEntries,
+        ...recentFiles.filter(f => !newFileEntries.some(nf => nf.name === f.name))
+      ].slice(0, 10);
+
+      setRecentFiles(updatedRecentFiles);
+      saveUserData(updatedRecentFiles, recentLinks);
+    }
+
     setLocalFiles([...localFiles, ...newFiles]);
   };
 
